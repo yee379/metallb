@@ -29,9 +29,11 @@ import (
 type layer2Controller struct {
 	announcer *layer2.Announce
 	myNode    string
+        cfg       *config.Config
 }
 
-func (c *layer2Controller) SetConfig(log.Logger, *config.Config) error {
+func (c *layer2Controller) SetConfig(l log.Logger, cfg *config.Config) error {
+        c.cfg = cfg
 	return nil
 }
 
@@ -60,8 +62,24 @@ func usableNodes(eps *v1.Endpoints) []string {
 	return ret
 }
 
+func speakersFor( svc *v1.Service, cfg *config.Config ) []string {
+
+        var ret []string
+        if _, ok := svc.ObjectMeta.Annotations["metallb.universe.tf/address-pool"]; ok {
+            pname := svc.ObjectMeta.Annotations["metallb.universe.tf/address-pool"]
+            ret = cfg.Pools[pname].Speakers
+        }
+
+        return ret
+}
+
 func (c *layer2Controller) ShouldAnnounce(l log.Logger, name string, svc *v1.Service, eps *v1.Endpoints) string {
-	nodes := usableNodes(eps)
+
+        nodes := speakersFor( svc, c.cfg )
+        if len(nodes) == 0 {
+          nodes = usableNodes(eps)
+        }
+ 
 	// Sort the slice by the hash of node + service name. This
 	// produces an ordering of ready nodes that is unique to this
 	// service.
